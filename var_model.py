@@ -1,3 +1,28 @@
+"""
+Vector Autoregression (VAR) processes
+
+References
+----------
+Lütkepohl (2005) New Introduction to Multiple Time Series Analysis
+"""
+import numpy as np
+import pandas as pd
+import scipy.stats as stats
+import statsmodels.tsa.tsatools as tsa
+from statsmodels.tsa.base.tsa_model import TimeSeriesModel, TimeSeriesResultsWrapper
+from statsmodels.tsa.vector_ar.output import VARSummary
+from statsmodels.tsa.vector_ar.irf import IRAnalysis
+from statsmodels.tsa.vector_ar.hypothesis_test_results import (
+    CausalityTestResults,
+    NormalityTestResults,
+    WhitenessTestResults,
+)
+# -------------------------------------------------------------------------------
+
+
+
+
+
 class VAR(TimeSeriesModel):
     r"""
     Fit VAR(p) process and do lag order selection
