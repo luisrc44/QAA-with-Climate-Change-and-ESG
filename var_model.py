@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import statsmodels.tsa.tsatools as tsa
+from statsmodels.tools.decorators import cache_readonly, deprecated_alias
 from statsmodels.tsa.base.tsa_model import TimeSeriesModel, TimeSeriesResultsWrapper
 from statsmodels.tsa.vector_ar.output import VARSummary
 from statsmodels.tsa.vector_ar.irf import IRAnalysis
