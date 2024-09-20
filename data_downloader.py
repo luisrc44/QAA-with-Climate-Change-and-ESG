@@ -35,47 +35,104 @@ class DataDownloader:
         return calculate_monthly_returns(asset_data), calculate_monthly_returns(benchmark_data)
 
 
-class BetaCalculator:
-    def __init__(self, assets_returns: pd.DataFrame, benchmark_returns: pd.DataFrame, climate_data: pd.DataFrame):
+class EconomicDataCleaner:
+    """
+    This class is responsible for loading, cleaning, and preparing economic data such as GDP and TB3.
+    """
+    
+    def __init__(self, gdp_path, tb3_path, cpi_path):
         """
-        Initializes the BetaCalculator object.
-
-        :param assets_returns: DataFrame with monthly returns of financial assets.
-        :param benchmark_returns: DataFrame with monthly returns of the benchmark.
-        :param climate_data: DataFrame with monthly changes of climate variables.
-        """
-        self.assets_returns = assets_returns
-        self.benchmark_returns = benchmark_returns
-        self.climate_data = climate_data
-
-    def calculate_betas(self) -> pd.DataFrame:
-        """
-        Calculates the beta values of the assets with respect to the benchmark and climate variables.
+        Initialize the EconomicDataCleaner with file paths for the datasets.
         
-        :return: A DataFrame containing the beta values of each asset for each variable.
+        :param gdp_path: Path to the GDP CSV file.
+        :param tb3_path: Path to the TB3 CSV file.
         """
-        betas = {}
+        self.gdp_path = gdp_path
+        self.tb3_path = tb3_path
+        self.cpi_path = cpi_path
 
-        for asset in self.assets_returns.columns[1:]:  # Exclude Date column
-            asset_betas = {}
+    def load_data(self):
+        """
+        Load the GDP and TB3 datasets.
+        """
+        self.gdp = pd.read_csv(self.gdp_path)
+        self.tb3 = pd.read_csv(self.tb3_path)
+        self.cpi = pd.read_csv(self.cpi_path)
 
-            # Combine benchmark returns and climate data with asset returns
-            merged_data = pd.merge(self.assets_returns[['Date', asset]], self.benchmark_returns, on='Date', how='inner')
-            merged_data = pd.merge(merged_data, self.climate_data, on='Date', how='inner')
+    def clean_gdp(self):
+        """
+        Clean and process the GDP dataset.
+        """
+        self.gdp = self.gdp.rename(columns={'DATE': 'Date', 'GDP': 'GDP'})
+        self.gdp['Date'] = pd.to_datetime(self.gdp['Date'])
+        #self.gdp['GDP_pct_change'] = self.gdp['GDP'].pct_change(periods=12).dropna()
 
-            # Run regression for each variable (benchmark and climate variables)
-            for variable in merged_data.columns[2:]:  # Start from 2 to skip Date and asset column
-                X = merged_data[[variable]]
-                y = merged_data[asset]
+    def clean_tb3(self):
+        """
+        Clean and process the TB3 dataset.
+        """
+        self.tb3 = self.tb3.rename(columns={'DATE': 'Date', 'TB3MS': 'TB3MS'})
+        self.tb3['Date'] = pd.to_datetime(self.tb3['Date'])
 
-                model = LinearRegression().fit(X, y)
-                beta = model.coef_[0]
+        # Interpolate missing values for monthly alignment
+        #self.tb3 = self.tb3.set_index('Date').resample('M').interpolate(method='linear').reset_index()
 
-                asset_betas[variable] = beta
+    def clean_cpi(self):
+        """
+        Clean and process the GDP dataset.
+        """
+        self.cpi = self.cpi.rename(columns={'DATE': 'Date', 'CPIAUCSL': 'CPI'})
+        self.cpi['Date'] = pd.to_datetime(self.cpi['Date'])
+        #self.gdp['GDP_pct_change'] = self.gdp['GDP'].pct_change(periods=12).dropna()
 
-            betas[asset] = asset_betas
+    def merge_data(self):
+        """
+        Merge the cleaned GDP, TB3, and CPI datasets on the 'Date' column, resample to monthly frequency, and fill missing months with the value of the first month in the quarter.
+        
+        :return: Merged DataFrame with GDP, TB3, and CPI starting from 2014-12-01 with monthly data.
+        """
+        # Ensure all Date columns are in datetime format
+        self.gdp['Date'] = pd.to_datetime(self.gdp['Date'], errors='coerce')
+        self.tb3['Date'] = pd.to_datetime(self.tb3['Date'], errors='coerce')
+        self.cpi['Date'] = pd.to_datetime(self.cpi['Date'], errors='coerce')
 
-        return pd.DataFrame(betas)
+        # Merge GDP and TB3 first
+        gdp_tb3 = pd.merge(self.gdp[['Date', 'GDP']], self.tb3[['Date', 'TB3MS']], on='Date', how='inner')
+        
+        # Then merge the result with CPI
+        data = pd.merge(gdp_tb3, self.cpi[['Date', 'CPI']], on='Date', how='inner')
+
+        # Set the date column as the index
+        data.set_index('Date', inplace=True)
+
+        # Resample to monthly frequency, using forward fill for GDP
+        data = data.resample('M').ffill()
+
+        # Convert the start date to datetime format
+        start_date = pd.to_datetime('2014-11-01')
+
+        # Filter the data to include only records from 2014-12-01 onward
+        data = data[data.index >= start_date]
+
+        return data
+
+
+    def clean_and_prepare_data(self):
+        """
+        Main function to load, clean, and merge all economic datasets.
+        
+        :return: Cleaned and merged economic dataset.
+        """
+        # Load datasets
+        self.load_data()
+
+        # Clean individual datasets
+        self.clean_gdp()
+        self.clean_tb3()
+        self.clean_cpi()
+
+        # Merge datasets and return the result
+        return self.merge_data()
 
 
 class ClimateDataCleaner:
@@ -174,11 +231,6 @@ class ClimateDataCleaner:
         # Keep only Date and DSCI columns
         self.drought = monthly_avg[['Date', 'DSCI']]
 
-        # Calculate year-to-year percentage change
-        #drought_pct = self.drought.drop(columns=['Date']).pct_change(periods=12).dropna()
-        #drought_pct['Date'] = self.drought['Date']
-        #self.drought = drought_pct
-
     def merge_data(self):
         """
         Merge the cleaned temperature, drought, and CO2 emission datasets on the 'Date' column.
@@ -198,7 +250,7 @@ class ClimateDataCleaner:
 
     def clean_and_prepare_data(self):
         """
-        Main function to load, clean, and merge all datasets.
+        Main function to load, clean, and merge all climate datasets.
         
         :return: Cleaned and merged dataset.
         """
