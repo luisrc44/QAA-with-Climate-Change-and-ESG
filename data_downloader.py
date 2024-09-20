@@ -151,6 +151,7 @@ class ClimateDataCleaner:
         temperature_pct = self.temperature.drop(columns=['Date']).pct_change(periods=12).dropna()
         temperature_pct['Date'] = self.temperature['Date']
         cols = ['Date'] + [col for col in temperature_pct.columns if col != 'Date']
+
         self.temperature = temperature_pct[cols]
 
     def clean_drought(self):
@@ -174,9 +175,9 @@ class ClimateDataCleaner:
         self.drought = monthly_avg[['Date', 'DSCI']]
 
         # Calculate year-to-year percentage change
-        drought_pct = self.drought.drop(columns=['Date']).pct_change(periods=12).dropna()
-        drought_pct['Date'] = self.drought['Date']
-        self.drought = drought_pct
+        #drought_pct = self.drought.drop(columns=['Date']).pct_change(periods=12).dropna()
+        #drought_pct['Date'] = self.drought['Date']
+        #self.drought = drought_pct
 
     def merge_data(self):
         """
