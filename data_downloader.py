@@ -78,3 +78,137 @@ class BetaCalculator:
         return pd.DataFrame(betas)
 
 
+class ClimateDataCleaner:
+    """
+    This class is responsible for loading, cleaning, and preparing climate and CO2 emissions data. 
+    It includes functionality for renaming columns, converting dates, calculating percentage changes, 
+    and merging the datasets for temperature, drought, and CO2 emissions.
+    """
+
+    def __init__(self, temperature_path, drought_path, co2_path):
+        """
+        Initialize the ClimateDataCleaner with file paths for the datasets.
+        
+        :param temperature_path: Path to the temperature CSV file.
+        :param drought_path: Path to the drought CSV file.
+        :param co2_path: Path to the CO2 emissions Excel file.
+        """
+        self.temperature_path = temperature_path
+        self.drought_path = drought_path
+        self.co2_path = co2_path
+
+    def load_data(self):
+        """
+        Load the temperature, drought, and CO2 emissions datasets.
+        """
+        self.temperature = pd.read_csv(self.temperature_path)
+        self.drought = pd.read_csv(self.drought_path)
+        
+        # Load CO2 emissions data from Excel
+        self.co2_emission = pd.read_excel(self.co2_path, skiprows=10).drop(index=0)
+        self.co2_emission = self.co2_emission[["Month", 
+                                               "Coal, Including Coal Coke Net Imports, CO2 Emissions",
+                                               "Natural Gas, Excluding Supplemental Gaseous Fuels, CO2 Emissions", 
+                                               "Petroleum, Excluding Biofuels, CO2 Emissions", 
+                                               "Total Energy CO2 Emissions"]]
+
+    def clean_co2_emission(self):
+        """
+        Clean and process the CO2 emissions dataset.
+        """
+        # Rename columns for clarity
+        self.co2_emission = self.co2_emission.rename(columns={
+            "Month": "Date",
+            "Coal, Including Coal Coke Net Imports, CO2 Emissions": "Coal",
+            "Natural Gas, Excluding Supplemental Gaseous Fuels, CO2 Emissions": "Natural Gas",
+            "Petroleum, Excluding Biofuels, CO2 Emissions": "Petroleum",
+            "Total Energy CO2 Emissions": "Total CO2 Emissions"
+        })
+
+        # Convert 'Date' to datetime format
+        self.co2_emission['Date'] = pd.to_datetime(self.co2_emission['Date'])
+
+        # Calculate year-to-year percentage change
+        self.co2_emission_pct_change = self.co2_emission.set_index('Date').pct_change(periods=12).dropna().reset_index()
+
+    def clean_temperature(self):
+        """
+        Clean and process the temperature dataset.
+        """
+        # Drop unnecessary columns and rename columns for clarity
+        self.temperature = self.temperature.drop(columns=['Average surface temperature.1', 'Code', 'Entity', 'year'])
+        self.temperature = self.temperature.rename(columns={'Day': 'Date', 'Average surface temperature': 'Temperature'})
+        
+        # Convert 'Date' to datetime format
+        self.temperature['Date'] = pd.to_datetime(self.temperature['Date'], format='%d/%m/%y', errors='coerce')
+        self.temperature['Date'] = self.temperature['Date'].apply(lambda x: x.replace(year=x.year - 100) if x.year >= 2025 else x)
+        
+        # Filter dates between 1940 and 2024, and adjust day to 1
+        self.temperature = self.temperature[(self.temperature['Date'] >= '1940-01-01') & (self.temperature['Date'] <= '2024-12-31')]
+        self.temperature['Date'] = self.temperature['Date'].apply(lambda x: x.replace(day=1))
+        
+        # Calculate year-to-year percentage change
+        temperature_pct = self.temperature.drop(columns=['Date']).pct_change(periods=12).dropna()
+        temperature_pct['Date'] = self.temperature['Date']
+        cols = ['Date'] + [col for col in temperature_pct.columns if col != 'Date']
+        self.temperature = temperature_pct[cols]
+
+    def clean_drought(self):
+        """
+        Clean and process the drought dataset.
+        """
+        # Rename columns for clarity and convert 'Date' to datetime format
+        self.drought = self.drought.rename(columns={'MapDate': 'Date'})
+        self.drought['Date'] = pd.to_datetime(self.drought['Date'], format='%Y%m%d')
+        
+        # Ensure DSCI is numeric and remove NaNs
+        self.drought['DSCI'] = pd.to_numeric(self.drought['DSCI'], errors='coerce')
+
+        # Group by year and month, then calculate the average DSCI
+        self.drought['Year'] = self.drought['Date'].dt.year
+        self.drought['Month'] = self.drought['Date'].dt.month
+        monthly_avg = self.drought.groupby(['Year', 'Month'])['DSCI'].mean().reset_index()
+        monthly_avg['Date'] = pd.to_datetime(monthly_avg.apply(lambda row: f"{int(row['Year'])}-{int(row['Month']):02d}-01", axis=1))
+        
+        # Keep only Date and DSCI columns
+        self.drought = monthly_avg[['Date', 'DSCI']]
+
+        # Calculate year-to-year percentage change
+        drought_pct = self.drought.drop(columns=['Date']).pct_change(periods=12).dropna()
+        drought_pct['Date'] = self.drought['Date']
+        self.drought = drought_pct
+
+    def merge_data(self):
+        """
+        Merge the cleaned temperature, drought, and CO2 emission datasets on the 'Date' column.
+        
+        :return: Merged DataFrame with all datasets combined.
+        """
+        # Ensure 'Date' is in datetime format for all datasets
+        self.temperature['Date'] = pd.to_datetime(self.temperature['Date'], errors='coerce')
+        self.drought['Date'] = pd.to_datetime(self.drought['Date'], errors='coerce')
+        self.co2_emission_pct_change['Date'] = pd.to_datetime(self.co2_emission_pct_change['Date'], errors='coerce')
+
+        # Merge the datasets on the 'Date' column
+        data = pd.merge(self.temperature, self.drought, on='Date', how='inner')
+        data = pd.merge(data, self.co2_emission_pct_change, on='Date', how='inner')
+        
+        return data
+
+    def clean_and_prepare_data(self):
+        """
+        Main function to load, clean, and merge all datasets.
+        
+        :return: Cleaned and merged dataset.
+        """
+        # Load datasets
+        self.load_data()
+
+        # Clean individual datasets
+        self.clean_co2_emission()
+        self.clean_temperature()
+        self.clean_drought()
+
+        # Merge datasets and return the result
+        return self.merge_data()
+
