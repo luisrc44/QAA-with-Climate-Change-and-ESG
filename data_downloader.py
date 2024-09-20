@@ -212,4 +212,3 @@ class ClimateDataCleaner:
 
         # Merge datasets and return the result
         return self.merge_data()
-
