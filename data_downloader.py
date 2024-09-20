@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
-import pandas_datareader.data as web
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
 class DataDownloader:
     
@@ -32,3 +33,48 @@ class DataDownloader:
             return df.resample('M').last().pct_change().dropna().reset_index().assign(Date=lambda x: x['Date'].apply(lambda y: y.replace(day=1)))
         
         return calculate_monthly_returns(asset_data), calculate_monthly_returns(benchmark_data)
+
+
+class BetaCalculator:
+    def __init__(self, assets_returns: pd.DataFrame, benchmark_returns: pd.DataFrame, climate_data: pd.DataFrame):
+        """
+        Initializes the BetaCalculator object.
+
+        :param assets_returns: DataFrame with monthly returns of financial assets.
+        :param benchmark_returns: DataFrame with monthly returns of the benchmark.
+        :param climate_data: DataFrame with monthly changes of climate variables.
+        """
+        self.assets_returns = assets_returns
+        self.benchmark_returns = benchmark_returns
+        self.climate_data = climate_data
+
+    def calculate_betas(self) -> pd.DataFrame:
+        """
+        Calculates the beta values of the assets with respect to the benchmark and climate variables.
+        
+        :return: A DataFrame containing the beta values of each asset for each variable.
+        """
+        betas = {}
+
+        for asset in self.assets_returns.columns[1:]:  # Exclude Date column
+            asset_betas = {}
+
+            # Combine benchmark returns and climate data with asset returns
+            merged_data = pd.merge(self.assets_returns[['Date', asset]], self.benchmark_returns, on='Date', how='inner')
+            merged_data = pd.merge(merged_data, self.climate_data, on='Date', how='inner')
+
+            # Run regression for each variable (benchmark and climate variables)
+            for variable in merged_data.columns[2:]:  # Start from 2 to skip Date and asset column
+                X = merged_data[[variable]]
+                y = merged_data[asset]
+
+                model = LinearRegression().fit(X, y)
+                beta = model.coef_[0]
+
+                asset_betas[variable] = beta
+
+            betas[asset] = asset_betas
+
+        return pd.DataFrame(betas)
+
+
