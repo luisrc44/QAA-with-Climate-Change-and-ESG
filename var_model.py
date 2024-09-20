@@ -23,7 +23,6 @@ from statsmodels.tsa.vector_ar.hypothesis_test_results import (
 
 
 
-
 class VAR(TimeSeriesModel):
     r"""
     Fit VAR(p) process and do lag order selection
@@ -116,7 +115,7 @@ class VAR(TimeSeriesModel):
         trend="c",
         verbose=False,
     ):
-        # todo: this code is only supporting deterministic terms as exog.
+        # to-do: this code is only supporting deterministic terms as exog.
         # This means that all exog-variables have lag 0. If dealing with
         # different exogs is necessary, a `lags_exog`-parameter might make
         # sense (e.g. a sequence of ints specifying lags).
