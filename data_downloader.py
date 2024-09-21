@@ -109,13 +109,14 @@ class EconomicDataCleaner:
         data = data.resample('M').ffill()
 
         # Convert the start date to datetime format
-        start_date = pd.to_datetime('2014-11-01')
+        start_date = pd.to_datetime('2014-12-01')
 
         # Filter the data to include only records from 2014-12-01 onward
         data = data[data.index >= start_date]
 
+        # Set all dates to the first day of the month
+        data.index = data.index.map(lambda x: x.replace(day=1))
         return data
-
 
     def clean_and_prepare_data(self):
         """
