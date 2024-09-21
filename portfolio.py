@@ -1,13 +1,15 @@
 import numpy as np
 import scipy.optimize as sco
 import matplotlib.pyplot as plt
+import pandas as pd
 
+# Clase para optimización de portafolio
 class PortfolioOptimizer:
     def __init__(self, expected_returns, cov_matrix, risk_free_rate):
         """
         Inicializa la clase PortfolioOptimizer con los retornos esperados y la matriz de covarianzas.
         
-        :param expected_returns: Retornos esperados de los activos.
+        :param expected_returns: Retornos esperados de los activos (calculados con VAR).
         :param cov_matrix: Matriz de covarianzas de los retornos.
         :param risk_free_rate: Tasa libre de riesgo (rf).
         """
@@ -105,3 +107,5 @@ class PortfolioOptimizer:
         plt.ylabel('Retorno')
         plt.title('Frontera Eficiente')
         plt.show()
+
+
