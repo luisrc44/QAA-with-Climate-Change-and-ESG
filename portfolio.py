@@ -4,19 +4,17 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 class PortfolioOptimizer:
-    def __init__(self, asset_returns, benchmark_returns, risk_free_rate, average_asset_returns=None):
+    def __init__(self, asset_prices, risk_free_rate, average_asset_returns=None):
         """
-        Inicializa la clase PortfolioOptimizer con los retornos de los activos y el benchmark.
+        Inicializa la clase PortfolioOptimizer con los retornos de los activos y la tasa libre de riesgo.
 
-        :param asset_returns: DataFrame de retornos de los activos (diarios, mensuales, etc.).
-        :param benchmark_returns: Retornos del benchmark (p.ej., un índice de referencia o tasa libre de riesgo).
+        :param asset_prices: DataFrame de retornos de los activos (diarios, mensuales, etc.).
         :param risk_free_rate: Tasa libre de riesgo (puede ser diaria o ajustada según la frecuencia de los datos).
         :param average_asset_returns: Retornos promedio de los activos (para cálculos como Sharpe o Sortino).
         """
-        self.asset_returns = asset_returns
-        self.benchmark_returns = benchmark_returns
+        self.asset_prices = asset_prices
         self.rf = risk_free_rate
-        self.average_asset_returns = average_asset_returns if average_asset_returns is not None else asset_returns.mean()
+        self.average_asset_returns = average_asset_returns if average_asset_returns is not None else asset_prices.mean()
 
     def portfolio_return(self, weights):
         """
@@ -27,80 +25,68 @@ class PortfolioOptimizer:
         """
         return np.dot(weights, self.average_asset_returns)
     
-    def neg_sortino_ratio(self, weights):
+    def portfolio_variance(self, weights):
         """
-        Calcula el Sortino Ratio negativo, enfocándose en la volatilidad negativa (semivarianza).
+        Calcula la varianza del portafolio.
         
         :param weights: Pesos del portafolio.
-        :return: Sortino Ratio negativo para minimizar en la optimización.
+        :return: Varianza del portafolio.
         """
-        portfolio_return = np.dot(weights, self.average_asset_returns)
-        excess_returns = self.asset_returns - self.rf  # Retornos en exceso sobre la tasa libre de riesgo
-        negative_excess_returns = excess_returns[excess_returns < 0]  # Solo los retornos negativos
-        weighted_negative_excess_returns = negative_excess_returns.multiply(weights, axis=1)  # Aplicar pesos
-        semivariance = np.mean(np.square(weighted_negative_excess_returns.sum(axis=1)))  # Calcular semivarianza
-
-        # Calcular el Sortino Ratio: (Retorno Portafolio - Tasa Libre de Riesgo) / Raíz de la Semivarianza
-        sortino_ratio = (portfolio_return - self.rf) / np.sqrt(semivariance)
-        
-        return -sortino_ratio
+        return np.dot(weights.T, np.dot(self.asset_prices.cov(), weights))
     
-    def neg_omega_ratio(self, weights, Smart=False):
+    def negative_sharpe_ratio(self, weights):
         """
-        Calcula el Omega Ratio negativo comparando retornos diarios del portafolio con un benchmark.
+        Calcula el Sharpe Ratio negativo para minimizar en la optimización.
 
         :param weights: Pesos del portafolio.
-        :param Smart: Bandera opcional para aplicar una penalización de autocorrelación (no esencial para este ejercicio).
-        :return: Omega Ratio negativo para la optimización.
+        :return: Sharpe Ratio negativo.
         """
-        # Retornos ponderados del portafolio
-        portfolio_returns = pd.DataFrame(self.asset_returns.dot(weights))
+        portfolio_ret = self.portfolio_return(weights)
+        portfolio_vol = np.sqrt(self.portfolio_variance(weights))
+        sharpe_ratio = (portfolio_ret - self.rf) / portfolio_vol
+        return -sharpe_ratio
+    
+    def generate_random_portfolios(self, num_portfolios=1000):
+        """
+        Genera muchos portafolios aleatorios y calcula el Sharpe Ratio para cada uno.
         
-        # Excesos de retorno sobre el benchmark
-        excess_returns = portfolio_returns[0] - self.benchmark_returns[self.benchmark_returns.columns[0]] 
-        
-        # Ganancias y pérdidas (exceso de retornos positivos y negativos)
-        positive_excess = excess_returns[excess_returns > 0].sum()
-        negative_excess = -excess_returns[excess_returns < 0].sum()
-        
-        omega_ratio = positive_excess / negative_excess  # Calcular el Omega Ratio
-        
-        # Penalización opcional por autocorrelación
-        if Smart:
-            autocorr_penalty = self.portfolio_autocorr_penalty(weights)
-            omega_ratio /= (1 + ((autocorr_penalty - 1) * 2))
-        
-        return -omega_ratio
+        :param num_portfolios: Número de portafolios aleatorios a generar.
+        :return: Un DataFrame con los retornos, la volatilidad y el Sharpe Ratio de los portafolios.
+        """
+        results = np.zeros((3, num_portfolios))
+        weights_array = []
 
-    def optimize_portfolio(self, strategy="sharpe"):
-        """
-        Optimiza el portafolio utilizando la estrategia indicada (Sharpe, Sortino, Omega).
+        for i in range(num_portfolios):
+            # Generar pesos aleatorios y normalizarlos para que sumen 1
+            weights = np.random.random(len(self.average_asset_returns))
+            weights /= np.sum(weights)
+            
+            # Calcular retorno y volatilidad
+            portfolio_ret = self.portfolio_return(weights)
+            portfolio_vol = np.sqrt(self.portfolio_variance(weights))
+            sharpe_ratio = (portfolio_ret - self.rf) / portfolio_vol
+            
+            results[0, i] = portfolio_ret
+            results[1, i] = portfolio_vol
+            results[2, i] = sharpe_ratio
+            weights_array.append(weights)
         
-        :param strategy: Estrategia de optimización ("sharpe", "sortino", "omega").
-        :return: Pesos óptimos del portafolio.
-        """
-        # Restricciones: la suma de los pesos debe ser 1
-        constraints = ({'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1})
-        
-        # Fronteras: pesos entre 0 y 1 (no vendemos activos a corto)
-        bounds = tuple((0, 1) for _ in range(len(self.average_asset_returns)))
-        
-        # Peso inicial para la optimización (pesos igual distribuidos)
-        initial_weights = len(self.average_asset_returns) * [1. / len(self.average_asset_returns)]
-        
-        # Selección de la estrategia
-        if strategy == "sharpe":
-            objective_function = self.negative_sharpe_ratio
-        elif strategy == "sortino":
-            objective_function = self.neg_sortino_ratio
-        elif strategy == "omega":
-            objective_function = self.neg_omega_ratio
-        else:
-            raise ValueError("Estrategia no reconocida. Usa 'sharpe', 'sortino' o 'omega'.")
-        
-        # Optimización
-        opt_results = sco.minimize(objective_function, initial_weights, 
-                                   method='SLSQP', bounds=bounds, constraints=constraints)
-        
-        return opt_results.x
+        return pd.DataFrame(results.T, columns=['Return', 'Volatility', 'Sharpe Ratio']), weights_array
 
+    def plot_random_portfolios(self, num_portfolios=1000):
+        """
+        Genera portafolios aleatorios y los grafica según su retorno y volatilidad.
+        
+        :param num_portfolios: Número de portafolios a generar.
+        """
+        df, weights_array = self.generate_random_portfolios(num_portfolios)
+
+        # Graficar los portafolios generados
+        plt.scatter(df['Volatility'], df['Return'], c=df['Sharpe Ratio'], cmap='viridis')
+        plt.colorbar(label='Sharpe Ratio')
+        plt.xlabel('Volatilidad')
+        plt.ylabel('Retorno Esperado')
+        plt.title(f'Portafolios Aleatorios ({num_portfolios})')
+        plt.show()
+        
+        return df, weights_array
