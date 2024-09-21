@@ -206,7 +206,7 @@ class ClimateDataCleaner:
         self.temperature['Date'] = self.temperature['Date'].apply(lambda x: x.replace(day=1))
         
         # Calculate year-to-year percentage change
-        temperature_pct = self.temperature.drop(columns=['Date']).pct_change(periods=12).dropna()
+        temperature_pct = self.temperature.drop(columns=['Date']).diff(periods=12).dropna()
         temperature_pct['Date'] = self.temperature['Date']
         cols = ['Date'] + [col for col in temperature_pct.columns if col != 'Date']
 
