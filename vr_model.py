@@ -9,8 +9,8 @@ import pandas as pd
 # Ignorar advertencias
 warnings.filterwarnings('ignore')
 
-# Clase ClimateVAR
-class ClimateVAR:
+# Clase ClimateVR
+class ClimateVR:
     def __init__(self, endog, exog=None, climate_data=None, dates=None, freq=None, missing="none"):
         self.endog = endog
         self.exog = exog
@@ -20,7 +20,7 @@ class ClimateVAR:
         self.missing = missing
 
         if self.endog.ndim == 1:
-            raise ValueError("Solo se proporcionó una variable, el modelo VAR necesita múltiples variables.")
+            raise ValueError("Solo se proporcionó una variable, el modelo VR necesita múltiples variables.")
         self.neqs = self.endog.shape[1]  # Número de ecuaciones (variables endógenas)
         self.n_totobs = len(endog)  # Número total de observaciones
 
@@ -36,7 +36,7 @@ class ClimateVAR:
         # Generar matriz de retardos
         z = self._get_lagged_endog(self.endog, maxlag=maxlags, trend=trend)
 
-        # Ajustar el modelo VAR
+        # Ajustar el modelo VR
         params = np.linalg.lstsq(z, self.endog[maxlags:], rcond=None)[0]
 
         # Guardar las dimensiones de z y endog ajustados para la predicción
