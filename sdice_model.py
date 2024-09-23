@@ -186,7 +186,7 @@ class ScenarioDICE(SimplifiedDICE):
     def plot_scenarios(self, results):
         """
         Genera gráficos comparativos para múltiples escenarios.
-        
+
         :param results: Resultados de la simulación de escenarios múltiples.
         """
         years = np.arange(100)
@@ -198,7 +198,6 @@ class ScenarioDICE(SimplifiedDICE):
         plt.title("Comparación de escenarios - Temperatura Global")
         plt.xlabel("Años")
         plt.ylabel("Temperatura (°C)")
-        plt.legend()
         plt.grid()
 
         # Gráficos de emisiones por escenario
@@ -208,7 +207,6 @@ class ScenarioDICE(SimplifiedDICE):
         plt.title("Comparación de escenarios - Emisiones de CO2")
         plt.xlabel("Años")
         plt.ylabel("Emisiones (GtC)")
-        plt.legend()
         plt.grid()
 
         # Gráficos de daños económicos por escenario
@@ -218,7 +216,6 @@ class ScenarioDICE(SimplifiedDICE):
         plt.title("Comparación de escenarios - Daños Económicos")
         plt.xlabel("Años")
         plt.ylabel("Daños Económicos (%)")
-        plt.legend()
         plt.grid()
 
         # Gráficos de producción económica por escenario
@@ -228,7 +225,8 @@ class ScenarioDICE(SimplifiedDICE):
         plt.title("Comparación de escenarios - Producción Económica")
         plt.xlabel("Años")
         plt.ylabel("Producción Económica (USD trillones)")
-        plt.legend()
         plt.grid()
 
         plt.show()
+
+
