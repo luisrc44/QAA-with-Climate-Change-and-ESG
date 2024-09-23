@@ -1,13 +1,15 @@
-import numpy as np
+import optuna
 import warnings
+import pandas as pd
+import numpy as np
+import logging
+from sklearn.metrics import mean_squared_error
 from statsmodels.tsa.tsatools import lagmat
 from statsmodels.tools.tools import add_constant
-import optuna
-from sklearn.metrics import mean_squared_error
-import pandas as pd
 
-# Ignorar advertencias
 warnings.filterwarnings('ignore')
+optuna.logging.set_verbosity(logging.ERROR)
+
 
 # Clase ClimateVR
 class ClimateVR:
@@ -35,8 +37,6 @@ class ClimateVR:
 
         # Generar matriz de retardos
         z = self._get_lagged_endog(self.endog, maxlag=maxlags, trend=trend)
-
-        # Ajustar el modelo VR
         params = np.linalg.lstsq(z, self.endog[maxlags:], rcond=None)[0]
 
         # Guardar las dimensiones de z y endog ajustados para la predicción
@@ -46,7 +46,6 @@ class ClimateVR:
         return params
 
     def _get_lagged_endog(self, endog, maxlag, trend):
-        # Utiliza 'maxlag' en lugar de 'lags'
         z = lagmat(endog, maxlag=maxlag, trim="both")
         if trend == "c":
             z = add_constant(z, prepend=False)
@@ -87,3 +86,68 @@ class ClimateVR:
         predictedvalues[:len(fittedvalues)] = fittedvalues
 
         return predictedvalues
+
+    def optimize_maxlags(self, all_data, n_trials=50):
+        """
+        Optimiza el número de retardos (maxlags) utilizando Optuna.
+
+        :param all_data: Conjunto de datos para entrenar el modelo y realizar predicciones.
+        :param n_trials: Número de pruebas que realizará Optuna para encontrar el mejor maxlags.
+        :return: Número óptimo de retardos (maxlags) y RMSE correspondiente.
+        """
+        
+        def objective(trial):
+            maxlags = trial.suggest_int('maxlags', 1, 10) # Elige el número de retardos entre 1 y 10
+            vr_results = self.fit(maxlags=maxlags) # Ajustar el modelo VR con el número de retardos sugerido
+            predicted = self.predict(vr_results, lags=maxlags, end=len(all_data)) # Realizar predicciones con el número de lags
+            actual = all_data[maxlags:len(all_data)]
+
+            # Asegurarse de que predicted y actual tengan la misma longitud
+            min_len = min(len(predicted), len(actual))
+            predicted = predicted[:min_len]
+            actual = actual[:min_len]
+
+            # Calcular el error de predicción (RMSE)
+            rmse = np.sqrt(mean_squared_error(actual, predicted))
+
+            return rmse
+        
+        # Crear el estudio de Optuna
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+        return study.best_trial.params['maxlags'], study.best_value
+    
+    def simulate_scenarios(self, vr_results, lags, n_scenarios=100, periods=10, noise_std=0.01):
+        """
+        Simula escenarios futuros para las variables no financieras utilizando un random walk basado en el modelo VR.
+        Se añade ruido gaussiano a las predicciones para generar escenarios múltiples.
+        
+        :param vr_results: Los parámetros ajustados del modelo VR.
+        :param lags: El número de retardos (lags) utilizados en el modelo VR.
+        :param n_scenarios: Número de escenarios a generar.
+        :param periods: Número de periodos futuros a simular.
+        :param noise_std: Desviación estándar del ruido gaussiano a añadir a las predicciones.
+        :return: Diccionario de escenarios simulados para cada variable.
+        """
+        # Obtener las dimensiones de las variables (número de variables no financieras)
+        n_variables = self.neqs  # Número de variables en el modelo VR
+        scenarios = {}
+
+        # Inicializar escenarios para cada variable
+        for var_idx, var_name in enumerate(self.endog.columns):
+            scenarios[var_name] = np.zeros((periods, n_scenarios))
+
+        # Simulación de escenarios
+        for scenario in range(n_scenarios):
+            # Predecir los valores para los próximos 'periods' utilizando el modelo ajustado VR
+            future_values = self.predict(vr_results, start=len(self.endog), end=len(self.endog) + periods - 1, lags=lags)
+            
+            # Añadir ruido gaussiano a las predicciones para generar trayectorias diferentes
+            noise = np.random.normal(0, noise_std, future_values.shape)
+            future_values_noisy = future_values + noise
+            
+            # Almacenar las predicciones con ruido para cada variable
+            for var_idx, var_name in enumerate(self.endog.columns):
+                scenarios[var_name][:, scenario] = future_values_noisy[:, var_idx]
+        
+        return scenarios
