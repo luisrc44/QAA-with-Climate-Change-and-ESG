@@ -262,6 +262,8 @@ class ClimateDataCleaner:
         self.clean_co2_emission()
         self.clean_temperature()
         self.clean_drought()
+        
+
 
         # Merge datasets and return the result
         return self.merge_data()
