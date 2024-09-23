@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+
 
 class PortfolioOptimizer:
     def __init__(self, asset_prices, risk_free_rate, benchmark_prices=None):
@@ -15,6 +17,48 @@ class PortfolioOptimizer:
         self.rf = risk_free_rate
         self.benchmark_prices = benchmark_prices
         self.average_asset_prices = self.asset_prices.mean()
+
+    def calculate_beta(self, portfolio_returns):
+        """
+        Calcula el beta del portafolio en relación con el benchmark usando una regresión lineal.
+        
+        :param portfolio_returns: Retornos del portafolio.
+        :return: Beta del portafolio.
+        """
+        # Usar los retornos del benchmark
+        benchmark_returns = self.benchmark_prices['^GSPC'].values  # Supongamos que la columna es el S&P500
+        
+        # Ajustar el tamaño para que coincida si es necesario
+        portfolio_returns = portfolio_returns.reshape(-1, 1)
+        benchmark_returns = benchmark_returns.reshape(-1, 1)
+        
+        # Usamos una regresión lineal para estimar beta
+        reg = LinearRegression().fit(benchmark_returns, portfolio_returns)
+        beta = reg.coef_[0][0]
+        
+        return beta
+
+    def calculate_jensen_alpha(self, weights):
+        """
+        Calcula el Jensen's Alpha del portafolio.
+        
+        :param weights: Pesos de los activos en el portafolio.
+        :return: Jensen's Alpha.
+        """
+        # Retornos del portafolio con los pesos dados
+        portfolio_returns = np.dot(self.asset_prices, weights)
+        
+        # Retornos promedio del portafolio y del benchmark
+        portfolio_avg_return = np.mean(portfolio_returns)
+        benchmark_avg_return = np.mean(self.benchmark_prices['^GSPC'])
+        
+        # Calcular beta del portafolio en relación con el benchmark
+        beta = self.calculate_beta(portfolio_returns)
+        
+        # Aplicar la fórmula de Jensen's Alpha
+        jensen_alpha = (portfolio_avg_return - self.rf) - beta * (benchmark_avg_return - self.rf)
+        
+        return jensen_alpha
 
     def calculate_sharpe_ratio(self, weights):
         """
