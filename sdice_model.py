@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class SimplifiedDICE:
-    def __init__(self, initial_temperature=1.0, initial_emissions=35, climate_sensitivity=3.0, discount_rate=0.02):
+    def __init__(self, initial_temperature=11.61, initial_emissions=374.88, climate_sensitivity=0.1, discount_rate=0.02):
         """
         Inicializa el modelo DICE simplificado con parámetros iniciales.
         
@@ -18,7 +18,7 @@ class SimplifiedDICE:
         self.discount_rate = discount_rate
 
         # Coeficientes del modelo simplificado
-        self.carbon_decay_rate = 0.1  # Tasa de decaimiento del carbono (aproximación)
+        self.carbon_decay_rate = -0.1  # Tasa de decaimiento del carbono (aproximación)
         self.abatement_cost = 0.02  # Costo de reducción de emisiones
         self.damage_coefficient = 0.002  # Coeficiente de daño económico
         self.economic_output = 100  # Producto económico inicial (en trillones de dólares)
@@ -86,7 +86,7 @@ class SimplifiedDICE:
 
         return temperatures, emissions, damages, economic_outputs
 
-    def plot_simulation(self, temperatures, emissions, damages, economic_outputs):
+    def plot_simulation(self, temperatures, emissions, damages, economic_outputs, years):
         """
         Genera gráficos de las simulaciones de temperatura, emisiones y daños económicos.
         
@@ -94,13 +94,14 @@ class SimplifiedDICE:
         :param emissions: Historia de las emisiones simuladas.
         :param damages: Historia de los daños económicos simulados.
         :param economic_outputs: Historia de la producción económica simulada.
+        :param years: Número de años para la simulación.
         """
-        years = np.arange(len(temperatures))
+        years_array = np.arange(len(temperatures))
 
         # Gráfico de temperatura
         plt.figure(figsize=(12, 8))
         plt.subplot(2, 2, 1)
-        plt.plot(years, temperatures, label="Temperatura (Celsius)")
+        plt.plot(years_array, temperatures, label="Temperatura (Celsius)")
         plt.title("Cambio de temperatura global")
         plt.xlabel("Años")
         plt.ylabel("Temperatura (°C)")
@@ -108,7 +109,7 @@ class SimplifiedDICE:
 
         # Gráfico de emisiones
         plt.subplot(2, 2, 2)
-        plt.plot(years, emissions, label="Emisiones de CO2 (GtC)", color='orange')
+        plt.plot(years_array, emissions, label="Emisiones de CO2 (GtC)", color='orange')
         plt.title("Emisiones de CO2")
         plt.xlabel("Años")
         plt.ylabel("Emisiones (GtC)")
@@ -116,7 +117,7 @@ class SimplifiedDICE:
 
         # Gráfico de daños económicos
         plt.subplot(2, 2, 3)
-        plt.plot(years, damages, label="Daños económicos (%)", color='red')
+        plt.plot(years_array, damages, label="Daños económicos (%)", color='red')
         plt.title("Impacto económico del cambio climático")
         plt.xlabel("Años")
         plt.ylabel("Daños económicos (%)")
@@ -124,7 +125,7 @@ class SimplifiedDICE:
 
         # Gráfico de producción económica
         plt.subplot(2, 2, 4)
-        plt.plot(years, economic_outputs, label="Producción económica (trillones USD)", color='green')
+        plt.plot(years_array, economic_outputs, label="Producción económica (trillones USD)", color='green')
         plt.title("Producción económica con cambio climático")
         plt.xlabel("Años")
         plt.ylabel("Producción económica (USD trillones)")
@@ -135,7 +136,7 @@ class SimplifiedDICE:
 
 
 class ScenarioDICE(SimplifiedDICE):
-    def __init__(self, initial_temperature=1.0, initial_emissions=35, climate_sensitivity=3.0, 
+    def __init__(self, initial_temperature=11.61, initial_emissions=374.88, climate_sensitivity=0.1, 
                  abatement_cost=0.02, discount_rate=0.02):
         # Llamamos al constructor del modelo SimplifiedDICE original
         super().__init__(initial_temperature, initial_emissions, climate_sensitivity, discount_rate)
@@ -160,7 +161,7 @@ class ScenarioDICE(SimplifiedDICE):
             }
         return scenarios
 
-    def simulate_multiple_scenarios(self, scenarios, years=100):
+    def simulate_multiple_scenarios(self, scenarios, years):
         """
         Simula múltiples escenarios, cada uno con diferentes parámetros.
         
@@ -183,18 +184,19 @@ class ScenarioDICE(SimplifiedDICE):
 
         return results
 
-    def plot_scenarios(self, results):
+    def plot_scenarios(self, results, years):
         """
         Genera gráficos comparativos para múltiples escenarios.
 
         :param results: Resultados de la simulación de escenarios múltiples.
+        :param years: Número de años para la simulación.
         """
-        years = np.arange(100)
+        years_array = np.arange(years)
 
         # Gráficos de temperatura por escenario
         plt.figure(figsize=(10, 6))
         for scenario_name, data in results.items():
-            plt.plot(years, data['temperatures'], label=scenario_name)
+            plt.plot(years_array, data['temperatures'], label=scenario_name)
         plt.title("Comparación de escenarios - Temperatura Global")
         plt.xlabel("Años")
         plt.ylabel("Temperatura (°C)")
@@ -203,7 +205,7 @@ class ScenarioDICE(SimplifiedDICE):
         # Gráficos de emisiones por escenario
         plt.figure(figsize=(10, 6))
         for scenario_name, data in results.items():
-            plt.plot(years, data['emissions'], label=scenario_name)
+            plt.plot(years_array, data['emissions'], label=scenario_name)
         plt.title("Comparación de escenarios - Emisiones de CO2")
         plt.xlabel("Años")
         plt.ylabel("Emisiones (GtC)")
@@ -212,7 +214,7 @@ class ScenarioDICE(SimplifiedDICE):
         # Gráficos de daños económicos por escenario
         plt.figure(figsize=(10, 6))
         for scenario_name, data in results.items():
-            plt.plot(years, data['damages'], label=scenario_name)
+            plt.plot(years_array, data['damages'], label=scenario_name)
         plt.title("Comparación de escenarios - Daños Económicos")
         plt.xlabel("Años")
         plt.ylabel("Daños Económicos (%)")
@@ -221,12 +223,11 @@ class ScenarioDICE(SimplifiedDICE):
         # Gráficos de producción económica por escenario
         plt.figure(figsize=(10, 6))
         for scenario_name, data in results.items():
-            plt.plot(years, data['economic_outputs'], label=scenario_name)
+            plt.plot(years_array, data['economic_outputs'], label=scenario_name)
         plt.title("Comparación de escenarios - Producción Económica")
         plt.xlabel("Años")
         plt.ylabel("Producción Económica (USD trillones)")
         plt.grid()
 
+        plt.tight_layout()
         plt.show()
-
-
