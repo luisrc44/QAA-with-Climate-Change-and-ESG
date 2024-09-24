@@ -85,13 +85,6 @@ class ClimateVR:
         # Asignar los valores ajustados a predictedvalues
         predictedvalues[:len(fittedvalues)] = fittedvalues
 
-        # Corrección para columnas específicas como GDP y CPI
-        for var_idx, var_name in enumerate(self.endog.columns):
-            if var_name in ['GDP', 'CPI', "TB3MS", "DSCI"]:  # Si la columna es GDP o CPI
-                # Sumamos el último valor conocido para las predicciones futuras (no es acumulativa)
-                last_known_value = self.endog.iloc[-1, var_idx]  # Último valor de esa columna en los datos originales
-                predictedvalues[:, var_idx] = last_known_value + predictedvalues[:, var_idx]
-
         return predictedvalues
 
     def optimize_maxlags(self, all_data, n_trials=50):
@@ -106,7 +99,7 @@ class ClimateVR:
         def objective(trial):
             maxlags = trial.suggest_int('maxlags', 1, 10) # Elige el número de retardos entre 1 y 10
             vr_results = self.fit(maxlags=maxlags) # Ajustar el modelo VR con el número de retardos sugerido
-            predicted = self.predict(vr_results, lags=maxlags, end=len(all_data) - 1) # Realizar predicciones con el número de lags
+            predicted = self.predict(vr_results, lags=maxlags, end=len(all_data)) # Realizar predicciones con el número de lags
             actual = all_data[maxlags:len(all_data)]
 
             # Asegurarse de que predicted y actual tengan la misma longitud
