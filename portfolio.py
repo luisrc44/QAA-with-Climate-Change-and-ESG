@@ -44,6 +44,48 @@ class PortfolioOptimizer:
         sharpe_ratio = (portfolio_returns - self.rf) / np.sqrt(portfolio_variance)
         return sharpe_ratio
 
+    def neg_omega_ratio(self, weights):
+        """
+        Calcula el Omega Ratio negativo.
+
+        :param weights: Pesos de los activos en el portafolio.
+        :return: Omega Ratio negativo.
+        """
+        portfolio_returns = np.dot(self.asset_prices, weights)
+        benchmark_returns = self.benchmark_prices['^GSPC'].values  # Convertir a NumPy array
+
+        if len(benchmark_returns) != len(portfolio_returns):
+            raise ValueError(f"El número de retornos del benchmark ({len(benchmark_returns)}) debe coincidir con los retornos del portafolio ({len(portfolio_returns)}).")
+
+        excess_returns = portfolio_returns - benchmark_returns
+        positive_excess = excess_returns[excess_returns > 0].sum()
+        negative_excess = -excess_returns[excess_returns < 0].sum()
+
+        if negative_excess == 0:
+            return np.inf
+
+        omega_ratio = positive_excess / negative_excess
+        return -omega_ratio
+
+    def neg_sortino_ratio(self, weights):
+        """
+        Calcula el Sortino Ratio negativo.
+
+        :param weights: Pesos de los activos en el portafolio.
+        :return: Sortino Ratio negativo.
+        """
+        portfolio_return = np.dot(weights, self.average_asset_prices)
+        excess_returns = self.asset_prices - self.rf
+        negative_excess_returns = excess_returns[excess_returns < 0]
+        weighted_negative_excess_returns = negative_excess_returns.multiply(weights, axis=1)
+        semivariance = np.mean(np.square(weighted_negative_excess_returns.sum(axis=1)))
+
+        if semivariance == 0:
+            return np.inf
+
+        sortino_ratio = (portfolio_return - self.rf) / np.sqrt(semivariance)
+        return -sortino_ratio
+
     def calculate_adjusted_return(self, weights):
         """
         Calcula el retorno ajustado del portafolio usando factores económicos y climáticos,
@@ -60,21 +102,21 @@ class PortfolioOptimizer:
 
     def objective_function(self, weights):
         """
-        Función objetivo para la optimización usando mínimos cuadrados.
+        Función objetivo para la optimización usando SLSQP.
         """
         adjusted_returns = self.calculate_adjusted_return(weights)
-        return np.sum((adjusted_returns - np.mean(adjusted_returns))**2)  # Error cuadrático
+        return -np.mean(adjusted_returns)  # Minimizar el negativo del retorno ajustado
 
-    def optimize_with_least_squares(self):
+    def optimize_with_slsqp(self):
         """
-        Optimiza los pesos del portafolio minimizando el error cuadrático con los factores climáticos y económicos.
+        Optimiza los pesos del portafolio utilizando el método SLSQP con los factores climáticos y económicos.
         """
         num_assets = len(self.asset_prices.columns)
         initial_weights = np.ones(num_assets) / num_assets  # Inicialización con pesos iguales
         bounds = [(0, 1) for _ in range(num_assets)]  # Pesos entre 0 y 1
         constraints = {'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}  # La suma de los pesos debe ser 1
 
-        result = minimize(self.objective_function, initial_weights, bounds=bounds, constraints=constraints)
+        result = minimize(self.objective_function, initial_weights, method='SLSQP', bounds=bounds, constraints=constraints)
 
         return result.x  # Pesos optimizados
 
@@ -93,8 +135,8 @@ class PortfolioOptimizer:
             portfolio_stats = []
             
             for _ in range(num_portfolios):
-                # Optimización por mínimos cuadrados
-                weights = self.optimize_with_least_squares()
+                # Optimización por SLSQP
+                weights = self.optimize_with_slsqp()
 
                 # Calcular la métrica basada en la estrategia elegida
                 if strategy == 'sharpe':
