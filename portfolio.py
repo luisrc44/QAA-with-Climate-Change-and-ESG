@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
-
+from scipy.optimize import minimize
 
 class PortfolioOptimizer:
     def __init__(self, asset_prices, risk_free_rate, benchmark_prices=None, economic_factors=None, climate_factors=None):
@@ -15,7 +15,6 @@ class PortfolioOptimizer:
         :param economic_factors: Factores económicos para ajustar retornos.
         :param climate_factors: Factores climáticos para ajustar retornos.
         """
-        # Eliminar cualquier columna no numérica (por ejemplo, Date) para evitar errores en los cálculos
         self.asset_prices = asset_prices.select_dtypes(include=[np.number])
         self.rf = risk_free_rate
         self.benchmark_prices = benchmark_prices
@@ -45,84 +44,39 @@ class PortfolioOptimizer:
         sharpe_ratio = (portfolio_returns - self.rf) / np.sqrt(portfolio_variance)
         return sharpe_ratio
 
-    def neg_omega_ratio(self, weights):
-        portfolio_returns = np.dot(self.asset_prices, weights)
-        benchmark_returns = self.benchmark_prices['^GSPC'].values  
-        excess_returns = portfolio_returns - benchmark_returns
-        positive_excess = excess_returns[excess_returns > 0].sum()
-        negative_excess = -excess_returns[excess_returns < 0].sum()
-        if negative_excess == 0:
-            return np.inf
-        omega_ratio = positive_excess / negative_excess
-        return -omega_ratio
-
-    def neg_sortino_ratio(self, weights):
-        portfolio_return = np.dot(weights, self.average_asset_prices)
-        excess_returns = self.asset_prices - self.rf
-        negative_excess_returns = excess_returns[excess_returns < 0]
-        weighted_negative_excess_returns = negative_excess_returns.multiply(weights, axis=1)
-        semivariance = np.mean(np.square(weighted_negative_excess_returns.sum(axis=1)))
-        if semivariance == 0:
-            return np.inf
-        sortino_ratio = (portfolio_return - self.rf) / np.sqrt(semivariance)
-        return -sortino_ratio
-
     def calculate_adjusted_return(self, weights):
         """
         Calcula el retorno ajustado del portafolio usando factores económicos y climáticos,
         considerando los retornos de cada activo en cada periodo de tiempo.
-
-        :param weights: Pesos de los activos en el portafolio.
-        :return: Retorno ajustado por periodo de tiempo.
         """
-        # Calcular los retornos del portafolio dinámicamente para cada periodo de tiempo
         portfolio_returns = np.dot(self.asset_prices, weights)
-
-        # Verificar si hay factores económicos y climáticos
         if self.economic_factors is not None and self.climate_factors is not None:
-            # Ajustar los retornos para cada periodo usando los factores
             economic_adjustments = np.dot(self.economic_factors, weights)
             climate_adjustments = np.dot(self.climate_factors, weights)
-            
-            # Ajustar los retornos del portafolio sumando el impacto de los factores
             adjusted_returns = portfolio_returns + economic_adjustments + climate_adjustments
         else:
-            # Si no hay factores climáticos/económicos, mantener el retorno sin ajuste
             adjusted_returns = portfolio_returns
-
-        # Retornar el retorno ajustado en cada periodo
         return adjusted_returns
 
-
-    def optimize_with_ranking(self, num_portfolios=1000, strategy='sharpe'):
+    def objective_function(self, weights):
         """
-        Optimiza los portafolios y asigna un ranking basado en la estrategia especificada.
-
-        :param num_portfolios: Número de portafolios a generar.
-        :param strategy: Estrategia para la optimización ('sharpe', 'omega', 'sortino').
-        :return: Lista de portafolios ordenados y sus ponderaciones inversas.
+        Función objetivo para la optimización usando mínimos cuadrados.
         """
-        portfolio_stats = []
-        
-        for _ in range(num_portfolios):
-            weights = np.random.random(len(self.asset_prices.columns))
-            weights /= np.sum(weights)
-            
-            # Calcular la métrica basada en la estrategia elegida
-            if strategy == 'sharpe':
-                score = self.calculate_sharpe_ratio(weights)
-            elif strategy == 'omega':
-                score = self.neg_omega_ratio(weights)
-            elif strategy == 'sortino':
-                score = self.neg_sortino_ratio(weights)
-            
-            portfolio_stats.append((weights, score))
-        
-        ranked_portfolios = sorted(portfolio_stats, key=lambda x: x[1], reverse=True)
-        total_portfolios = len(ranked_portfolios)
-        inverse_weights = [(i+1)/total_portfolios for i in range(total_portfolios)]
-        
-        return ranked_portfolios, inverse_weights
+        adjusted_returns = self.calculate_adjusted_return(weights)
+        return np.sum((adjusted_returns - np.mean(adjusted_returns))**2)  # Error cuadrático
+
+    def optimize_with_least_squares(self):
+        """
+        Optimiza los pesos del portafolio minimizando el error cuadrático con los factores climáticos y económicos.
+        """
+        num_assets = len(self.asset_prices.columns)
+        initial_weights = np.ones(num_assets) / num_assets  # Inicialización con pesos iguales
+        bounds = [(0, 1) for _ in range(num_assets)]  # Pesos entre 0 y 1
+        constraints = {'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}  # La suma de los pesos debe ser 1
+
+        result = minimize(self.objective_function, initial_weights, bounds=bounds, constraints=constraints)
+
+        return result.x  # Pesos optimizados
 
     def optimize_with_multiple_strategies(self, num_portfolios=1000, strategies=['sharpe', 'omega', 'sortino']):
         """
@@ -133,14 +87,15 @@ class PortfolioOptimizer:
         :return: Diccionario de portafolios óptimos para cada estrategia.
         """
         optimal_portfolios = {}
+        all_portfolios = []  # Para almacenar todos los portafolios y luego aplicar el ranking
 
         for strategy in strategies:
             portfolio_stats = []
             
             for _ in range(num_portfolios):
-                weights = np.random.random(len(self.asset_prices.columns))
-                weights /= np.sum(weights)
-                
+                # Optimización por mínimos cuadrados
+                weights = self.optimize_with_least_squares()
+
                 # Calcular la métrica basada en la estrategia elegida
                 if strategy == 'sharpe':
                     score = self.calculate_sharpe_ratio(weights)
@@ -153,9 +108,17 @@ class PortfolioOptimizer:
                 adjusted_return = self.calculate_adjusted_return(weights)
 
                 portfolio_stats.append((weights, score, adjusted_return))
+                all_portfolios.append((strategy, weights, score, adjusted_return))
             
             ranked_portfolios = sorted(portfolio_stats, key=lambda x: x[1], reverse=True)
             optimal_portfolios[strategy] = ranked_portfolios
 
-        return optimal_portfolios
+        # Crear un DataFrame con todos los portafolios para el ranking
+        portfolios_df = pd.DataFrame(all_portfolios, columns=['strategy', 'weights', 'score', 'adjusted_return'])
+        
+        # Ordenar todos los portafolios por el score en orden descendente (mejor primero)
+        portfolios_df['rank'] = portfolios_df['score'].rank(ascending=False)
+        portfolios_df = portfolios_df.sort_values(by='score', ascending=False)
+
+        return optimal_portfolios, portfolios_df
 
