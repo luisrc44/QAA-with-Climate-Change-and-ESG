@@ -52,14 +52,16 @@ class PortfolioOptimizer:
                           method='SLSQP', bounds=bounds, constraints=constraints)
         return result
 
-    def random_portfolio(self, num_assets):
+    def random_portfolio(self, num_assets, green_weight, gray_weight, num_green, num_gray):
         weights = np.random.random(num_assets)
+        weights[:num_gray] *= gray_weight
+        weights[num_gray:] *= green_weight
         return weights / np.sum(weights)
 
-    def generate_portfolios(self, num_portfolios=1000, metric='sharpe'):
+    def generate_portfolios(self, num_portfolios=1000, metric='sharpe', green_weight=0.5, gray_weight=0.5, num_green=0, num_gray=0):
         portfolio_stats = []
         for _ in range(num_portfolios):
-            weights = self.random_portfolio(self.asset_prices.shape[1])
+            weights = self.random_portfolio(num_green + num_gray, green_weight, gray_weight, num_green, num_gray)
             if metric == 'sharpe':
                 score = self.calculate_sharpe_ratio(weights)
             elif metric == 'omega':
@@ -91,16 +93,16 @@ class PortfolioOptimizer:
                 # Inicialización de pesos
                 initial_weights = np.ones(total_assets) / total_assets
 
-                # Bounds
-                bounds_green = [(0, green_weight) for _ in range(num_green)]
-                bounds_gray = [(0, gray_weight) for _ in range(num_gray)]
-                bounds = bounds_green + bounds_gray
+                # Bounds (con mínimo del 2% para SLSQP)
+                bounds_green = [(0.02, green_weight) for _ in range(num_green)]
+                bounds_gray = [(0.02, gray_weight) for _ in range(num_gray)]
+                bounds = bounds_gray + bounds_green  # Primero gray, luego green
 
                 # Restricciones
                 constraints = [
                     {'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1},  # Sum of weights = 1
-                    {'type': 'eq', 'fun': lambda weights: np.sum(weights[:num_green]) - green_weight},  # Green weight
-                    {'type': 'eq', 'fun': lambda weights: np.sum(weights[num_green:]) - gray_weight}    # Gray weight
+                    {'type': 'eq', 'fun': lambda weights: np.sum(weights[:num_gray]) - gray_weight},  # Gray weight
+                    {'type': 'eq', 'fun': lambda weights: np.sum(weights[num_gray:]) - green_weight}  # Green weight
                 ]
 
                 # Primer portafolio optimizado con SLSQP
@@ -116,7 +118,7 @@ class PortfolioOptimizer:
 
                 portfolio_stats.append((optimized_weights, score))
                 all_portfolios.append({
-                    'weights': optimized_weights,
+                    'weights': np.round(optimized_weights, 2),  # Redondear los pesos a 4 decimales
                     'metric_score': score,
                     'strategy': strategy,
                     'green_weight': green_weight,
@@ -124,13 +126,17 @@ class PortfolioOptimizer:
                 })
 
                 # Generar 1000 portafolios aleatorios y seleccionar los mejores 4
-                random_portfolios = self.generate_portfolios(num_portfolios=1000, metric=strategy)
+                random_portfolios = self.generate_portfolios(
+                    num_portfolios=10000, metric=strategy,
+                    green_weight=green_weight, gray_weight=gray_weight,
+                    num_green=num_green, num_gray=num_gray
+                )
                 top_random_portfolios = sorted(random_portfolios, key=lambda x: x[1], reverse=True)[:4]
 
                 for random_weights, random_score in top_random_portfolios:
                     portfolio_stats.append((random_weights, random_score))
                     all_portfolios.append({
-                        'weights': random_weights,
+                        'weights': np.round(random_weights, 2),  # Redondear los pesos a 4 decimales
                         'metric_score': random_score,
                         'strategy': strategy,
                         'green_weight': green_weight,
