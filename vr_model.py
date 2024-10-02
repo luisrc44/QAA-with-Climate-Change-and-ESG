@@ -104,7 +104,7 @@ class ClimateVR:
         """
         
         def objective(trial):
-            maxlags = trial.suggest_int('maxlags', 1, 10) # Elige el número de retardos entre 1 y 10
+            maxlags = trial.suggest_int('maxlags', 8, 14) # Elige el número de retardos entre 1 y 10
             vr_results = self.fit(maxlags=maxlags) # Ajustar el modelo VR con el número de retardos sugerido
             predicted = self.predict(vr_results, lags=maxlags, end=len(all_data) - 1) # Realizar predicciones con el número de lags
             actual = all_data[maxlags:len(all_data)]
