@@ -3,13 +3,15 @@ import pandas as pd
 from scipy.optimize import minimize
 
 class PortfolioOptimizer:
-    def __init__(self, asset_prices, risk_free_rate, benchmark_prices=None, economic_factors=None, climate_factors=None):
+    def __init__(self, asset_prices, risk_free_rate, benchmark_prices=None, economic_factors=None, climate_factors=None, betas=None):
         self.asset_prices = asset_prices.select_dtypes(include=[np.number])
         self.rf = risk_free_rate
         self.benchmark_prices = benchmark_prices
         self.economic_factors = economic_factors
         self.climate_factors = climate_factors
-        self.average_asset_prices = self.asset_prices.mean()
+        self.betas = betas  
+        self.average_asset_prices = self.asset_prices
+
 
     def calculate_sharpe_ratio(self, weights):
         portfolio_returns = np.dot(weights, self.asset_prices.mean())
@@ -152,3 +154,28 @@ class PortfolioOptimizer:
         portfolios_df = pd.DataFrame(all_portfolios)
 
         return optimal_portfolios, portfolios_df
+
+    # Función para calcular el retorno esperado de los portafolios
+    def calculate_expected_return(self, weights, asset_prices):
+        return np.dot(weights, asset_prices.mean())
+
+
+    def calculate_adjusted_returns(self, var_predictions):
+        """
+        Ajusta los retornos esperados de los activos usando las betas y las predicciones del VAR.
+
+        :param var_predictions: NumPy array con las predicciones del VAR para las variables económicas y climáticas.
+        :return: DataFrame con los retornos ajustados de los activos.
+        """
+        if self.betas is None:
+            raise ValueError("Las betas no han sido proporcionadas.")
+
+        # Asegurarse de que las predicciones estén en formato DataFrame
+        # Crear un DataFrame para las predicciones usando las mismas columnas que las betas y generar un índice temporal adecuado
+        var_predictions_df = pd.DataFrame(var_predictions, columns=self.betas.columns)
+
+        # Calcular los retornos ajustados
+        adjusted_returns = np.dot(self.betas.values, var_predictions_df.T)
+
+        return pd.DataFrame(adjusted_returns, index=self.betas.index, columns=var_predictions_df.index)
+
