@@ -19,8 +19,8 @@ class VR_Model:
         Inicializa el VAR manual con datos y el número de lags.
         Los datos se escalan para estabilizar las magnitudes y se asegura que 'Date' no sea parte del conjunto de datos escalados.
         """
-        self.original_data = data  # Almacenar el dataframe original para el índice de fechas
-        self.data = data.drop(columns=['Date'])  # Eliminar la columna de fechas
+        self.original_data = data
+        self.data = data.drop(columns=['Date'])
         self.lags = lags
         self.scaler = StandardScaler()
         self.data_scaled = pd.DataFrame(self.scaler.fit_transform(self.data), index=self.data.index, columns=self.data.columns)
@@ -51,16 +51,13 @@ class VR_Model:
         last_values = self.data_scaled.values[-self.lags:]
 
         for _ in range(steps):
-            # Crear el vector de predicción con los últimos valores (lags)
             X_pred = last_values.flatten()
             forecast = X_pred @ self.coefs
             predictions.append(forecast)
             
-            # Actualizar los valores con la nueva predicción
             last_values = np.vstack([last_values[1:], forecast])
 
         predictions = np.array(predictions)
-        # Desescalar las predicciones
         return self.scaler.inverse_transform(predictions)
 
     def plot_predictions(self, steps=3):
@@ -69,11 +66,9 @@ class VR_Model:
         """
         forecast = self.predict(steps)
         
-        # Corregir el índice para las predicciones basado en las fechas reales del dataframe
         last_date = self.original_data['Date'].iloc[-1]
-        forecast_index = pd.date_range(last_date, periods=steps+1, freq='MS')[1:]  # 'MS' para tomar el inicio de cada mes
+        forecast_index = pd.date_range(last_date, periods=steps+1, freq='MS')[1:]
 
-        # Graficar todas las variables
         for i, col in enumerate(self.data.columns):
             plt.figure(figsize=(10, 6))
             plt.plot(self.original_data['Date'], self.original_data[col], label="Historical")
@@ -82,6 +77,34 @@ class VR_Model:
             plt.legend()
             plt.show()
 
+    def generate_scenarios_with_noise(self, steps=3, n_scenarios=100):
+        """
+        Genera múltiples escenarios agregando ruido gaussiano a las predicciones.
+        """
+        forecast = self.predict(steps)
+        scenarios = []
+
+        for _ in range(n_scenarios):
+            noise = np.random.normal(0, 0.04, forecast.shape)
+            scenario = forecast + noise
+            scenarios.append(scenario)
+
+        scenarios = np.array(scenarios)
+
+        last_date = self.original_data['Date'].iloc[-1]
+        forecast_index = pd.date_range(last_date, periods=steps+1, freq='MS')[1:]
+
+        for i, col in enumerate(self.data.columns):
+            plt.figure(figsize=(10, 6))
+            plt.plot(self.original_data['Date'], self.original_data[col], label="Historical")
+            plt.plot(forecast_index, forecast[:, i], label="Forecast", linestyle='--', color='black')
+
+            for scenario in scenarios:
+                plt.plot(forecast_index, scenario[:, i], alpha=0.2)
+
+            plt.title(f"Forecast with Noise Scenarios: {col}")
+            plt.legend()
+            plt.show()
 
 def optimize_lags(data, trials=100):
     """
