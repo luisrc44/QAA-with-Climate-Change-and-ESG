@@ -1,83 +1,102 @@
+from sklearn.preprocessing import StandardScaler
+from numpy.linalg import inv
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from statsmodels.tsa.api import VAR
-import optuna
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
 import logging
 import warnings
+import optuna
 
-# Configurar el nivel de logging de optuna a ERROR
 optuna.logging.set_verbosity(optuna.logging.ERROR)
-
-# Suprimir las advertencias de statsmodels y pandas
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-class VARModel:
-    def __init__(self, data):
+
+class VR_Model:
+    def __init__(self, data, lags):
         """
-        Inicializa la clase con los datos que serán usados para el VAR.
-        Los datos se escalan para estabilizar las magnitudes.
+        Inicializa el VAR manual con datos y el número de lags.
+        Los datos se escalan para estabilizar las magnitudes y se asegura que 'Date' no sea parte del conjunto de datos escalados.
         """
-        self.data = data.set_index('Date')  # Asegura que las fechas sean el índice
+        self.original_data = data  # Almacenar el dataframe original para el índice de fechas
+        self.data = data.drop(columns=['Date'])  # Eliminar la columna de fechas
+        self.lags = lags
         self.scaler = StandardScaler()
         self.data_scaled = pd.DataFrame(self.scaler.fit_transform(self.data), index=self.data.index, columns=self.data.columns)
-        self.model = None
-        self.lag_order = None
+        self.coefs = None
 
-    def fit_var(self, lags):
+    def create_lagged_matrix(self):
         """
-        Ajusta el modelo VAR con un número de lags especificado.
-        En caso de error con la matriz no positiva definida, retorna np.inf para que Optuna lo descarte.
+        Crea las matrices de diseño (X) y respuesta (Y) con lags.
         """
-        try:
-            model = VAR(self.data_scaled)
-            self.model = model.fit(lags)
-            return self.model.aic  # Retorna el AIC para usarlo en Optuna
-        except np.linalg.LinAlgError:
-            return np.inf  # Retornar un valor alto para que Optuna lo descarte
-        except ValueError:
-            return np.inf  # Captura errores adicionales de los datos
+        X, Y = [], []
+        for i in range(self.lags, len(self.data_scaled)):
+            X.append(self.data_scaled.iloc[i-self.lags:i].values.flatten())
+            Y.append(self.data_scaled.iloc[i].values)
+        return np.array(X), np.array(Y)
+
+    def fit(self):
+        """
+        Ajusta el modelo VAR usando regresión ordinaria.
+        """
+        X, Y = self.create_lagged_matrix()
+        self.coefs = inv(X.T @ X) @ X.T @ Y
 
     def predict(self, steps=3):
         """
-        Realiza las predicciones para los próximos pasos (steps) y desescala las predicciones.
+        Realiza predicciones a partir de los coeficientes ajustados y desescala las predicciones.
         """
-        forecast_scaled = self.model.forecast(self.model.endog[-self.lag_order:], steps=steps)
-        forecast = self.scaler.inverse_transform(forecast_scaled)
-        return forecast
+        predictions = []
+        last_values = self.data_scaled.values[-self.lags:]
 
-    def optimize_lags(self, trials=100):
-        """
-        Optimiza el número de lags usando Optuna. Se ha reducido el rango de sugerencias de lags.
-        """
-        def objective(trial):
-            lags = trial.suggest_int('lags', 1, 5)  # Reducir el rango a 1-5 lags
-            aic = self.fit_var(lags)
-            return aic
-        
-        study = optuna.create_study(direction='minimize')
-        study.optimize(objective, n_trials=trials)
-        
-        self.lag_order = study.best_params['lags']
-        print(f"Optimal number of lags: {self.lag_order}")
+        for _ in range(steps):
+            # Crear el vector de predicción con los últimos valores (lags)
+            X_pred = last_values.flatten()
+            forecast = X_pred @ self.coefs
+            predictions.append(forecast)
+            
+            # Actualizar los valores con la nueva predicción
+            last_values = np.vstack([last_values[1:], forecast])
+
+        predictions = np.array(predictions)
+        # Desescalar las predicciones
+        return self.scaler.inverse_transform(predictions)
 
     def plot_predictions(self, steps=3):
         """
-        Grafica las predicciones futuras y las series originales.
+        Grafica las predicciones futuras y las series originales, utilizando el índice de fechas del dataframe original.
         """
         forecast = self.predict(steps)
         
         # Corregir el índice para las predicciones basado en las fechas reales del dataframe
-        last_date = self.data.index[-1]
-        forecast_index = pd.date_range(last_date, periods=steps+1, freq='MS')[1:]  # 'MS' para que tome el inicio de cada mes
+        last_date = self.original_data['Date'].iloc[-1]
+        forecast_index = pd.date_range(last_date, periods=steps+1, freq='MS')[1:]  # 'MS' para tomar el inicio de cada mes
 
         # Graficar todas las variables
         for i, col in enumerate(self.data.columns):
             plt.figure(figsize=(10, 6))
-            plt.plot(self.data.index, self.data[col], label="Historical")
+            plt.plot(self.original_data['Date'], self.original_data[col], label="Historical")
             plt.plot(forecast_index, forecast[:, i], label="Forecast", linestyle='--')
             plt.title(f"Forecast vs Historical: {col}")
             plt.legend()
             plt.show()
+
+
+def optimize_lags(data, trials=100):
+    """
+    Optimiza el número de lags usando Optuna para el modelo manual VAR.
+    """
+    def objective(trial):
+        lags = trial.suggest_int('lags', 1, 5)
+        var_model = VR_Model(data, lags)
+        var_model.fit()
+        X, Y = var_model.create_lagged_matrix()
+        predictions = X @ var_model.coefs
+        mse = np.mean((Y - predictions) ** 2)
+        return mse
+
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=trials)
+    
+    return study.best_params['lags']
