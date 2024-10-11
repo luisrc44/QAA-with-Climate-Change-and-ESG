@@ -12,8 +12,10 @@ class PortfolioOptimizer:
         self.betas = betas  
         self.average_asset_prices = self.asset_prices
 
-
+    # Antes de calcular el Sharpe ratio, imprime las dimensiones de las variables
     def calculate_sharpe_ratio(self, weights):
+        print(f"Dimensiones de asset_prices: {self.asset_prices.shape}")
+        print(f"Dimensiones de weights: {weights.shape}")
         portfolio_returns = np.dot(weights, self.asset_prices.mean())
         portfolio_variance = np.dot(weights.T, np.dot(self.asset_prices.cov(), weights))
         sharpe_ratio = (portfolio_returns - self.rf) / np.sqrt(portfolio_variance)
@@ -31,16 +33,18 @@ class PortfolioOptimizer:
         return -omega_ratio
 
     def neg_sortino_ratio(self, weights):
-        portfolio_return = np.dot(weights, self.average_asset_prices)
+        portfolio_return = np.dot(weights, self.asset_prices.mean())
         excess_returns = self.asset_prices - self.rf
         negative_excess_returns = excess_returns[excess_returns < 0]
         weighted_negative_excess_returns = negative_excess_returns.multiply(weights, axis=1)
         semivariance = np.mean(np.square(weighted_negative_excess_returns.sum(axis=1)))
+
         if semivariance == 0:
             return np.inf
         sortino_ratio = (portfolio_return - self.rf) / np.sqrt(semivariance)
-        return -sortino_ratio
-
+        
+        return -sortino_ratio  
+    
     def objective_function(self, weights, metric):
         if metric == 'sharpe':
             return -self.calculate_sharpe_ratio(weights)
@@ -155,27 +159,58 @@ class PortfolioOptimizer:
 
         return optimal_portfolios, portfolios_df
 
-    # Función para calcular el retorno esperado de los portafolios
-    def calculate_expected_return(self, weights, asset_prices):
-        return np.dot(weights, asset_prices.mean())
-
-
-    def calculate_adjusted_returns(self, var_predictions):
+    def adjust_returns_with_var_predictions(self, var_predictions):
         """
-        Ajusta los retornos esperados de los activos usando las betas y las predicciones del VAR.
-
-        :param var_predictions: NumPy array con las predicciones del VAR para las variables económicas y climáticas.
+        Ajusta los retornos de los activos usando las betas y las predicciones del VAR.
+        
+        :param var_predictions: Predicciones del VAR para factores económicos y climáticos.
         :return: DataFrame con los retornos ajustados de los activos.
         """
         if self.betas is None:
             raise ValueError("Las betas no han sido proporcionadas.")
 
-        # Asegurarse de que las predicciones estén en formato DataFrame
-        # Crear un DataFrame para las predicciones usando las mismas columnas que las betas y generar un índice temporal adecuado
+        # Verifica que las predicciones y las betas estén alineadas
         var_predictions_df = pd.DataFrame(var_predictions, columns=self.betas.columns)
 
-        # Calcular los retornos ajustados
+        # Multiplica las betas por las predicciones del VAR para obtener los retornos ajustados
+        # Las betas tienen un shape de (num_activos, num_factores), y var_predictions_df tiene un shape de (num_periodos, num_factores)
         adjusted_returns = np.dot(self.betas.values, var_predictions_df.T)
 
+        # Retorna los retornos ajustados en formato DataFrame con los activos como índice y periodos como columnas
         return pd.DataFrame(adjusted_returns, index=self.betas.index, columns=var_predictions_df.index)
 
+
+    def calculate_portfolio_expected_returns(self, portfolios_df, var_predictions):
+        """
+        Calcula los retornos esperados ajustados para todos los portafolios usando las predicciones del VAR y las betas.
+        
+        :param portfolios_df: DataFrame que contiene los portafolios y sus ponderaciones.
+        :param var_predictions: Predicciones del VAR para factores económicos y climáticos.
+        :return: DataFrame con los retornos esperados ajustados para cada portafolio.
+        """
+        # Ajusta los retornos de los activos con las predicciones del VAR
+        adjusted_returns = self.adjust_returns_with_var_predictions(var_predictions)
+
+        expected_returns = []
+        for _, portfolio in portfolios_df.iterrows():
+            weights = portfolio['weights']
+            
+            # Ajusta los retornos para los activos y multiplícalos por los pesos del portafolio
+            expected_return = self.calculate_expected_return(weights, adjusted_returns)
+            expected_returns.append(expected_return)
+
+        portfolios_df['expected_return'] = expected_returns
+        return portfolios_df
+    def calculate_expected_return(self, weights, asset_returns):
+        """
+        Calcula el retorno esperado de un portafolio con las ponderaciones dadas.
+        
+        :param weights: Array de ponderaciones de los activos en el portafolio.
+        :param asset_returns: DataFrame de retornos ajustados de los activos.
+        :return: El retorno esperado del portafolio.
+        """
+        # Toma el promedio de los retornos ajustados (a lo largo de los periodos) para cada activo
+        asset_returns_mean = asset_returns.mean(axis=1)  # Promedio de cada activo a lo largo de los periodos
+
+        # Multiplica los pesos del portafolio por los retornos ajustados promedio de cada activo
+        return np.dot(weights, asset_returns_mean)
