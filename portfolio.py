@@ -159,6 +159,7 @@ class PortfolioOptimizer:
 
         return optimal_portfolios, portfolios_df
 
+    
     def adjust_returns_with_var_predictions(self, var_predictions):
         """
         Ajusta los retornos de los activos usando las betas y las predicciones del VAR.
@@ -201,6 +202,8 @@ class PortfolioOptimizer:
 
         portfolios_df['expected_return'] = expected_returns
         return portfolios_df
+
+
     def calculate_expected_return(self, weights, asset_returns):
         """
         Calcula el retorno esperado de un portafolio con las ponderaciones dadas.
