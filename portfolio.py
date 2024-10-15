@@ -14,8 +14,8 @@ class PortfolioOptimizer:
 
     # Antes de calcular el Sharpe ratio, imprime las dimensiones de las variables
     def calculate_sharpe_ratio(self, weights):
-        print(f"Dimensiones de asset_prices: {self.asset_prices.shape}")
-        print(f"Dimensiones de weights: {weights.shape}")
+        #print(f"Dimensiones de asset_prices: {self.asset_prices.shape}")
+        #print(f"Dimensiones de weights: {weights.shape}")
         portfolio_returns = np.dot(weights, self.asset_prices.mean())
         portfolio_variance = np.dot(weights.T, np.dot(self.asset_prices.cov(), weights))
         sharpe_ratio = (portfolio_returns - self.rf) / np.sqrt(portfolio_variance)
