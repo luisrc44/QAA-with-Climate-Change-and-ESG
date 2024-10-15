@@ -123,3 +123,18 @@ def optimize_lags(data, trials=100):
     study.optimize(objective, n_trials=trials)
     
     return study.best_params['lags']
+
+def run_var_model(e_eco_data, steps=3, trials=50):
+    """
+    Optimiza el número de lags para el modelo VAR, ajusta el modelo y realiza predicciones.
+    
+    :param e_eco_data: DataFrame con los datos económicos y climáticos
+    :param steps: Número de periodos a predecir
+    :param trials: Número de pruebas para optimizar lags
+    :return: Predicciones del modelo VAR
+    """
+    optimal_lags = optimize_lags(e_eco_data, trials=trials)
+    vr_model = VR_Model(e_eco_data, optimal_lags)
+    vr_model.fit()
+    var_predictions = vr_model.predict(steps=steps)
+    return var_predictions

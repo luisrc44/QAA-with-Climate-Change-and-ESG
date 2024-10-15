@@ -217,3 +217,25 @@ class PortfolioOptimizer:
 
         # Multiplica los pesos del portafolio por los retornos ajustados promedio de cada activo
         return np.dot(weights, asset_returns_mean)
+    
+    def optimize_portfolios_with_var(optimizer, var_predictions, gray_assets, green_assets, strategies=['sharpe', 'omega', 'sortino']):
+        """
+        Optimiza portafolios usando las predicciones del VAR y calcula los retornos esperados.
+        
+        :param optimizer: Instancia de la clase PortfolioOptimizer
+        :param var_predictions: Predicciones del modelo VAR
+        :param gray_assets: Lista de activos 'gray'
+        :param green_assets: Lista de activos 'green'
+        :param strategies: Lista de estrategias para la optimización
+        :return: DataFrame con los portafolios y sus retornos esperados
+        """
+        # Optimizar los portafolios
+        optimal_portfolios, portfolios_df = optimizer.optimize_with_multiple_strategies(
+            strategies=strategies,
+            gray_assets=gray_assets,
+            green_assets=green_assets
+        )
+
+        # Calcular los retornos esperados ajustados con las predicciones del VAR
+        portfolios_df = optimizer.calculate_portfolio_expected_returns(portfolios_df, var_predictions)
+        return portfolios_df
